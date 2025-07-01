@@ -75,11 +75,21 @@ impl PullerSpeedController {
         self.forward = forward;
     }
 
+    /// Get current regulation mode
+    pub fn get_regulation_mode(&self) -> &PullerRegulationMode {
+        &self.regulation_mode
+    }
+
     fn update_speed(&mut self, t: Instant) -> Velocity {
         let speed = match self.enabled {
             true => match self.regulation_mode {
                 PullerRegulationMode::Speed => self.target_speed,
-                PullerRegulationMode::Diameter => unimplemented!(),
+                PullerRegulationMode::Diameter => {
+                    // In diameter mode, calculate speed based on target diameter and volume flow
+                    // This is a simplified implementation - in practice, you'd integrate with
+                    // the DiameterController for more sophisticated control
+                    self.calculate_speed_for_diameter()
+                },
             },
             false => Velocity::ZERO,
         };
@@ -90,6 +100,27 @@ impl PullerSpeedController {
 
         self.last_speed = speed;
         speed
+    }
+
+    /// Calculate the required puller speed to achieve target diameter
+    /// This is a simplified calculation - in practice, this would be integrated
+    /// with the DiameterController and real-time diameter feedback
+    fn calculate_speed_for_diameter(&self) -> Velocity {
+        // Basic calculation based on target diameter
+        // For a given volume flow rate, the required speed is:
+        // speed = volume_flow_rate / cross_sectional_area
+        // cross_sectional_area = π × (diameter/2)²
+        
+        let diameter_m = self.target_diameter.get::<uom::si::length::meter>();
+        let radius_m = diameter_m / 2.0;
+        let cross_section_area = std::f64::consts::PI * radius_m * radius_m;
+        
+        // Assume a nominal volume flow rate - this should come from extruder feedback
+        let nominal_volume_flow = 0.5e-6; // m³/s (0.5 cm³/s converted to m³/s)
+        
+        let required_speed = nominal_volume_flow / cross_section_area;
+        
+        Velocity::new::<uom::si::velocity::meter_per_second>(required_speed)
     }
 
     pub fn speed_to_angular_velocity(&self, speed: Velocity) -> AngularVelocity {

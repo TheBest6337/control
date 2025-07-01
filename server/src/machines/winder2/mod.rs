@@ -2,6 +2,7 @@ pub mod act;
 pub mod adaptive_spool_speed_controller;
 pub mod api;
 pub mod clamp_revolution;
+pub mod diameter_controller;
 pub mod filament_tension;
 pub mod minmax_spool_speed_controller;
 pub mod new;
@@ -26,6 +27,7 @@ use control_core::{
     socketio::namespace::NamespaceCacheingLogic,
     uom_extensions::velocity::meter_per_minute,
 };
+use diameter_controller::DiameterController;
 use puller_speed_controller::{PullerRegulationMode, PullerSpeedController};
 use spool_speed_controller::SpoolSpeedController;
 use tension_arm::TensionArm;
@@ -66,6 +68,9 @@ pub struct Winder2 {
 
     // control cirguit puller
     pub puller_speed_controller: PullerSpeedController,
+    
+    // diameter regulation
+    pub diameter_controller: DiameterController,
 }
 
 impl Machine for Winder2 {}
@@ -276,6 +281,54 @@ impl Winder2 {
             &mut self.traverse_end_stop,
             self.spool_speed_controller.get_speed(),
         );
+    }
+
+    /// Sync diameter controller with current sensor data and apply control outputs
+    pub fn sync_diameter_controller(&mut self, t: Instant) {
+        // Get actual diameter measurement from laser sensor system
+        let measured_diameter = self.get_laser_diameter_measurement();
+        
+        // Update the diameter controller's current measurement
+        self.diameter_controller.set_current_diameter(measured_diameter);
+        
+        // TODO: Get actual filament speed measurement
+        // For now, we'll use the puller speed as an approximation
+        let filament_speed = self.puller_speed_controller.get_speed();
+        
+        // TODO: Get extruder RPM from extruder system
+        // For now, we'll use a placeholder value
+        let extruder_rpm = uom::si::f64::AngularVelocity::new::<uom::si::angular_velocity::revolution_per_minute>(10.0);
+        
+        // Update the diameter controller with current measurements
+        let control_output = self.diameter_controller.update(
+            t,
+            extruder_rpm,
+            filament_speed,
+            &self.puller_speed_controller,
+            &mut self.spool_speed_controller,
+        );
+        
+        // Apply the control outputs
+        // Apply speed adjustment to puller if in diameter regulation mode
+        if matches!(self.puller_speed_controller.get_regulation_mode(), super::puller_speed_controller::PullerRegulationMode::Diameter) {
+            let adjusted_speed = filament_speed * control_output.speed_multiplier;
+            self.puller_speed_controller.set_target_speed(adjusted_speed);
+        }
+        
+        // TODO: Apply RPM adjustment to extruder if integrated
+        // This would require communication with the extruder system
+    }
+
+    /// Get diameter measurement from laser sensor system
+    /// This method provides interface to the laser diameter measurement system
+    /// TODO: Integrate with actual LaserMachine for real-time diameter data
+    fn get_laser_diameter_measurement(&self) -> Length {
+        // Placeholder implementation - this should be replaced with actual laser system integration
+        // In the future, this could:
+        // 1. Access a shared laser measurement cache/registry
+        // 2. Use inter-machine communication to get laser data
+        // 3. Subscribe to laser measurement events
+        Length::new::<millimeter>(1.75) // Default target diameter as placeholder
     }
 
     /// Can wind capability check
@@ -642,6 +695,93 @@ impl Winder2 {
         self.spool_speed_controller
             .set_adaptive_deacceleration_urgency_multiplier(deacceleration_urgency_multiplier);
         self.emit_state();
+    }
+}
+
+/// Implement Diameter Controller
+impl Winder2 {
+    /// Set target diameter for diameter control
+    pub fn diameter_set_target(&mut self, target_diameter: f64) {
+        let target = Length::new::<millimeter>(target_diameter);
+        self.diameter_controller.set_target_diameter(target);
+        self.emit_diameter_state();
+    }
+
+    /// Get target diameter
+    pub fn diameter_get_target(&self) -> f64 {
+        self.diameter_controller.get_target_diameter().get::<millimeter>()
+    }
+
+    /// Get current measured diameter
+    pub fn diameter_get_current(&self) -> f64 {
+        self.diameter_controller.get_current_diameter().get::<millimeter>()
+    }
+
+    /// Enable/disable diameter control
+    pub fn diameter_set_enabled(&mut self, enabled: bool) {
+        self.diameter_controller.set_enabled(enabled);
+        self.emit_diameter_state();
+    }
+
+    /// Check if diameter control is enabled
+    pub fn diameter_is_enabled(&self) -> bool {
+        self.diameter_controller.is_enabled()
+    }
+
+    /// Set speed scale factor for process acceleration
+    pub fn diameter_set_speed_scale(&mut self, factor: f64) {
+        self.diameter_controller.set_speed_scale_factor(factor);
+        self.emit_diameter_state();
+    }
+
+    /// Get current speed scale factor
+    pub fn diameter_get_speed_scale(&self) -> f64 {
+        self.diameter_controller.get_speed_scale_factor()
+    }
+
+    /// Set diameter control strategy
+    pub fn diameter_set_strategy(&mut self, strategy: super::diameter_controller::DiameterControlStrategy) {
+        self.diameter_controller.set_strategy(strategy);
+        self.emit_diameter_state();
+    }
+
+    /// Get current control strategy
+    pub fn diameter_get_strategy(&self) -> super::diameter_controller::DiameterControlStrategy {
+        self.diameter_controller.get_strategy()
+    }
+
+    /// Get control performance metrics
+    pub fn diameter_get_diagnostics(&self) -> super::diameter_controller::DiameterControlDiagnostics {
+        self.diameter_controller.get_diagnostics()
+    }
+
+    /// Emit diameter state event
+    pub fn emit_diameter_state(&mut self) {
+        let event = api::Winder2Events::DiameterState(
+            api::DiameterStateEvent {
+                target_diameter: self.diameter_controller.get_target_diameter().get::<millimeter>(),
+                current_diameter: self.diameter_controller.get_current_diameter().get::<millimeter>(),
+                enabled: self.diameter_controller.is_enabled(),
+                speed_scale_factor: self.diameter_controller.get_speed_scale_factor(),
+                strategy: self.diameter_controller.get_strategy(),
+            }
+            .build(),
+        );
+        self.namespace.emit(event);
+    }
+
+    /// Emit diameter measurement event
+    pub fn emit_diameter_measurement(&mut self) {
+        let diagnostics = self.diameter_controller.get_diagnostics();
+        let event = api::Winder2Events::DiameterMeasurement(
+            api::DiameterMeasurementEvent {
+                diameter: self.diameter_controller.get_current_diameter().get::<millimeter>(),
+                volume_rate: diagnostics.current_volume_rate.get::<uom::si::volume_rate::cubic_meter_per_second>() * 1e6, // Convert to mm³/s
+                filament_speed: self.puller_speed_controller.get_speed().get::<meter_per_minute>(),
+            }
+            .build(),
+        );
+        self.namespace.emit(event);
     }
 }
 

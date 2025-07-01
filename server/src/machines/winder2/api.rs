@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use super::{Winder2, Winder2Mode, puller_speed_controller::PullerRegulationMode};
+use super::{Winder2, Winder2Mode, puller_speed_controller::PullerRegulationMode, diameter_controller::DiameterControlStrategy};
 use control_core::{
     machines::api::MachineApi,
     socketio::{
@@ -88,6 +88,25 @@ enum Mutation {
 
     // Mode
     SetMode(Mode),
+    ModeSet(Mode),
+
+    // Diameter Controller
+    DiameterSetTarget(f64),
+    DiameterSetEnabled(bool),
+    DiameterSetSpeedScale(f64),
+    DiameterSetStrategy(DiameterControlStrategy),
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct TraversePositionEvent {
+    /// position in mm
+    pub position: Option<f64>,
+}
+
+impl TraversePositionEvent {
+    pub fn build(&self) -> Event<Self> {
+        Event::new("TraversePositionEvent", self.clone())
+    }
 }
 
 #[derive(Serialize, Debug, Clone, Default)]
@@ -210,6 +229,34 @@ pub struct SpoolSpeedControllerState {
     pub adaptive_deacceleration_urgency_multiplier: f64,
 }
 
+#[derive(Serialize, Debug, Clone)]
+pub struct DiameterStateEvent {
+    pub target_diameter: f64,
+    pub current_diameter: f64,
+    pub enabled: bool,
+    pub speed_scale_factor: f64,
+    pub strategy: DiameterControlStrategy,
+}
+
+impl DiameterStateEvent {
+    pub fn build(&self) -> Event<Self> {
+        Event::new("DiameterStateEvent", self.clone())
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct DiameterMeasurementEvent {
+    pub diameter: f64,
+    pub volume_rate: f64,
+    pub filament_speed: f64,
+}
+
+impl DiameterMeasurementEvent {
+    pub fn build(&self) -> Event<Self> {
+        Event::new("DiameterMeasurementEvent", self.clone())
+    }
+}
+
 pub enum Winder2Events {
     LiveValues(Event<LiveValuesEvent>),
     State(Event<StateEvent>),
@@ -259,40 +306,45 @@ impl CacheableEvents<Winder2Events> for Winder2Events {
 impl MachineApi for Winder2 {
     fn api_mutate(&mut self, request_body: Value) -> Result<(), anyhow::Error> {
         let mutation: Mutation = serde_json::from_value(request_body)?;
-        match mutation {
-            Mutation::EnableTraverseLaserpointer(enable) => self.set_laser(enable),
-            Mutation::SetMode(mode) => self.set_mode(&mode.into()),
-            Mutation::SetTraverseLimitOuter(limit) => self.traverse_set_limit_outer(limit),
-            Mutation::SetTraverseLimitInner(limit) => self.traverse_set_limit_inner(limit),
-            Mutation::SetTraverseStepSize(size) => self.traverse_set_step_size(size),
-            Mutation::SetTraversePadding(padding) => self.traverse_set_padding(padding),
-            Mutation::GotoTraverseLimitOuter => self.traverse_goto_limit_outer(),
-            Mutation::GotoTraverseLimitInner => self.traverse_goto_limit_inner(),
-            Mutation::GotoTraverseHome => self.traverse_goto_home(),
-            Mutation::SetPullerRegulationMode(regulation) => self.puller_set_regulation(regulation),
-            Mutation::SetPullerTargetSpeed(value) => self.puller_set_target_speed(value),
-            Mutation::SetPullerTargetDiameter(_) => todo!(),
-            Mutation::SetPullerForward(value) => self.puller_set_forward(value),
-            Mutation::SetSpoolRegulationMode(mode) => self.spool_set_regulation_mode(mode),
-            Mutation::SetSpoolMinMaxMinSpeed(speed) => self.spool_set_minmax_min_speed(speed),
-            Mutation::SetSpoolMinMaxMaxSpeed(speed) => self.spool_set_minmax_max_speed(speed),
-            Mutation::SetSpoolAdaptiveTensionTarget(value) => {
-                self.spool_set_adaptive_tension_target(value)
-            }
-            Mutation::SetSpoolAdaptiveRadiusLearningRate(value) => {
-                self.spool_set_adaptive_radius_learning_rate(value)
-            }
-            Mutation::SetSpoolAdaptiveMaxSpeedMultiplier(value) => {
-                self.spool_set_adaptive_max_speed_multiplier(value)
-            }
-            Mutation::SetSpoolAdaptiveAccelerationFactor(value) => {
-                self.spool_set_adaptive_acceleration_factor(value)
-            }
-            Mutation::SetSpoolAdaptiveDeaccelerationUrgencyMultiplier(value) => {
-                self.spool_set_adaptive_deacceleration_urgency_multiplier(value)
-            }
-            Mutation::ZeroTensionArmAngle => self.tension_arm_zero(),
-        }
+match mutation {
+    Mutation::EnableTraverseLaserpointer(enable) => self.set_laser(enable),
+    Mutation::SetMode(mode) => self.set_mode(&mode.into()),
+    Mutation::SetTraverseLimitOuter(limit) => self.traverse_set_limit_outer(limit),
+    Mutation::SetTraverseLimitInner(limit) => self.traverse_set_limit_inner(limit),
+    Mutation::SetTraverseStepSize(size) => self.traverse_set_step_size(size),
+    Mutation::SetTraversePadding(padding) => self.traverse_set_padding(padding),
+    Mutation::GotoTraverseLimitOuter => self.traverse_goto_limit_outer(),
+    Mutation::GotoTraverseLimitInner => self.traverse_goto_limit_inner(),
+    Mutation::GotoTraverseHome => self.traverse_goto_home(),
+    Mutation::SetPullerRegulationMode(regulation) => self.puller_set_regulation(regulation),
+    Mutation::SetPullerTargetSpeed(value) => self.puller_set_target_speed(value),
+    Mutation::SetPullerTargetDiameter(value) => self.puller_set_target_diameter(value),
+    Mutation::SetPullerForward(value) => self.puller_set_forward(value),
+    Mutation::SetSpoolRegulationMode(mode) => self.spool_set_regulation_mode(mode),
+    Mutation::SetSpoolMinMaxMinSpeed(speed) => self.spool_set_minmax_min_speed(speed),
+    Mutation::SetSpoolMinMaxMaxSpeed(speed) => self.spool_set_minmax_max_speed(speed),
+    Mutation::SetSpoolAdaptiveTensionTarget(value) => {
+        self.spool_set_adaptive_tension_target(value)
+    }
+    Mutation::SetSpoolAdaptiveRadiusLearningRate(value) => {
+        self.spool_set_adaptive_radius_learning_rate(value)
+    }
+    Mutation::SetSpoolAdaptiveMaxSpeedMultiplier(value) => {
+        self.spool_set_adaptive_max_speed_multiplier(value)
+    }
+    Mutation::SetSpoolAdaptiveAccelerationFactor(value) => {
+        self.spool_set_adaptive_acceleration_factor(value)
+    }
+    Mutation::SetSpoolAdaptiveDeaccelerationUrgencyMultiplier(value) => {
+        self.spool_set_adaptive_deacceleration_urgency_multiplier(value)
+    }
+    Mutation::ZeroTensionArmAngle => self.tension_arm_zero(),
+    Mutation::DiameterSetTarget(value) => self.diameter_set_target(value),
+    Mutation::DiameterSetEnabled(value) => self.diameter_set_enabled(value),
+    Mutation::DiameterSetSpeedScale(value) => self.diameter_set_speed_scale(value),
+    Mutation::DiameterSetStrategy(value) => self.diameter_set_strategy(value),
+    Mutation::ModeSet(mode) => self.set_mode(&mode.into()),
+}
         Ok(())
     }
 

@@ -25,6 +25,9 @@ impl Actor for Winder2 {
             // sync the traverse speed
             self.sync_traverse_speed();
 
+            // sync the diameter controller
+            self.sync_diameter_controller(now);
+
             // check if traverse state changed
             if self.traverse_controller.did_change_state() {
                 self.emit_state();
@@ -33,8 +36,12 @@ impl Actor for Winder2 {
             // if last measurement emit is older than 1 second, emit a new measurement
             if now.duration_since(self.last_measurement_emit) > Duration::from_secs_f64(1.0 / 60.0)
             {
-                self.emit_live_values();
-                self.last_measurement_emit = now;
+self.emit_tension_arm_angle();
+self.emit_spool_rpm();
+self.emit_puller_speed();
+self.emit_traverse_position();
+self.emit_diameter_measurement();
+self.last_measurement_emit = now;
             }
         })
     }

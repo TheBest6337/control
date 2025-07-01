@@ -1,5 +1,8 @@
 use std::time::Instant;
 
+use crate::machines::winder2::puller_speed_controller::PullerSpeedController;
+use crate::machines::winder2::traverse_controller::TraverseController;
+use crate::machines::winder2::diameter_controller::DiameterController;
 use super::api::Winder2Namespace;
 use super::tension_arm::TensionArm;
 use super::{Winder2, Winder2Mode};
@@ -379,10 +382,17 @@ impl MachineNewTrait for Winder2 {
                     Length::new::<millimeter>(92.0), // Default outer limit
                     64,                              // Microsteps
                 ),
+                diameter_controller: DiameterController::new(Length::new::<millimeter>(1.75)),
             };
 
-            // initalize events
-            new.emit_state();
+// initalize events
+            new.emit_traverse_state();
+            new.emit_traverse_position();
+            new.emit_mode_state();
+            new.emit_tension_arm_state();
+            new.emit_puller_state();
+            new.emit_diameter_state();
+
             Ok(new)
         })
     }

@@ -2,13 +2,20 @@ use crate::{
     machines::{MACHINE_LASER_V1, VENDOR_QITECH},
     serial::devices::laser::Laser,
 };
-use api::{LaserEvents, LaserMachineNamespace, LaserState, LiveValuesEvent, MinMaxDiameterEvent, StateEvent};
+use api::{
+    LaserEvents, LaserMachineNamespace, LaserState, LiveValuesEvent, MinMaxDiameterEvent,
+    StateEvent,
+};
 use control_core::{
     machines::identification::MachineIdentification, socketio::namespace::NamespaceCacheingLogic,
 };
 use control_core_derive::Machine;
 use smol::lock::RwLock;
-use std::{collections::VecDeque, sync::Arc, time::{Duration, Instant}};
+use std::{
+    collections::VecDeque,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use uom::si::{f64::Length, length::millimeter};
 
 pub mod act;
@@ -75,7 +82,7 @@ impl DiameterTracker {
 
     pub fn set_timeframe(&mut self, timeframe_minutes: u64) {
         self.timeframe_duration = Duration::from_secs(timeframe_minutes * 60);
-        
+
         // Clean up measurements that are now outside the new timeframe
         if let Some(latest) = self.measurements.back() {
             let cutoff = latest.timestamp - self.timeframe_duration;
@@ -108,7 +115,7 @@ pub struct LaserMachine {
 
     // diameter tracking for min/max over timeframe
     diameter_tracker: DiameterTracker,
-    
+
     //laser target configuration
     laser_target: LaserTarget,
 
@@ -239,7 +246,8 @@ impl LaserMachine {
 
         // Add diameter measurement to tracker if we have valid data
         if diameter_mm > 0.0 {
-            self.diameter_tracker.add_measurement(diameter_mm, Instant::now());
+            self.diameter_tracker
+                .add_measurement(diameter_mm, Instant::now());
         }
 
         self.x_diameter = laser_data

@@ -25,5 +25,11 @@ impl MachineAct for LaserMachine {
             self.emit_live_values();
             self.last_measurement_emit = now;
         }
+        
+        // Emit min/max diameter every second
+        if now.duration_since(self.last_minmax_emit) > Duration::from_secs(1) {
+            self.emit_min_max_diameter();
+            self.last_minmax_emit = now;
+        }
     }
 }

@@ -32,6 +32,22 @@ impl LiveValuesEvent {
     }
 }
 
+#[derive(Serialize, Debug, Clone, Default)]
+pub struct MinMaxDiameterEvent {
+    /// minimum diameter in the timeframe in mm
+    pub min_diameter: Option<f64>,
+    /// maximum diameter in the timeframe in mm  
+    pub max_diameter: Option<f64>,
+    /// timeframe in minutes
+    pub timeframe_minutes: u64,
+}
+
+impl MinMaxDiameterEvent {
+    pub fn build(&self) -> Event<Self> {
+        Event::new("MinMaxDiameterEvent", self.clone())
+    }
+}
+
 #[derive(Serialize, Debug, Clone, BuildEvent)]
 pub struct StateEvent {
     pub is_default_state: bool,
@@ -53,11 +69,14 @@ pub struct LaserState {
     pub lower_tolerance: f64,
     /// target diameter in mm
     pub target_diameter: f64,
+    /// timeframe for min/max tracking in minutes
+    pub min_max_timeframe_minutes: u64,
 }
 
 pub enum LaserEvents {
     LiveValues(Event<LiveValuesEvent>),
     State(Event<StateEvent>),
+    MinMaxDiameter(Event<MinMaxDiameterEvent>),
 }
 
 #[derive(Debug)]
@@ -78,6 +97,7 @@ impl CacheableEvents<Self> for LaserEvents {
         match self {
             Self::LiveValues(event) => event.into(),
             Self::State(event) => event.into(),
+            Self::MinMaxDiameter(event) => event.into(),
         }
     }
 
@@ -88,6 +108,7 @@ impl CacheableEvents<Self> for LaserEvents {
         match self {
             Self::LiveValues(_) => cache_one_hour,
             Self::State(_) => cache_first_and_last,
+            Self::MinMaxDiameter(_) => cache_first_and_last,
         }
     }
 }
@@ -100,6 +121,7 @@ enum Mutation {
     SetTargetDiameter(f64),
     SetLowerTolerance(f64),
     SetHigherTolerance(f64),
+    SetMinMaxTimeframe(u64),
 }
 
 impl NamespaceCacheingLogic<LaserEvents> for LaserMachineNamespace {
@@ -123,6 +145,9 @@ impl MachineApi for LaserMachine {
             }
             Mutation::SetTargetDiameter(target_diameter) => {
                 self.set_target_diameter(target_diameter);
+            }
+            Mutation::SetMinMaxTimeframe(timeframe_minutes) => {
+                self.set_min_max_timeframe(timeframe_minutes);
             }
         }
         Ok(())

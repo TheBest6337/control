@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::serial::{devices::laser::Laser, registry::SERIAL_DEVICE_REGISTRY};
 
-use super::{LaserMachine, LaserTarget, api::LaserMachineNamespace};
+use super::{DiameterTracker, LaserMachine, LaserTarget, api::LaserMachineNamespace};
 use anyhow::Error;
 use control_core::machines::new::MachineNewTrait;
 use uom::{
@@ -35,12 +35,15 @@ impl MachineNewTrait for LaserMachine {
             higher_tolerance: Length::new::<millimeter>(0.05),
             lower_tolerance: Length::new::<millimeter>(0.05),
             diameter: Length::new::<millimeter>(1.75),
+            min_max_timeframe_minutes: 30, // Default 30 minutes
         };
         let mut laser_machine = Self {
             laser,
             namespace: LaserMachineNamespace::new(params.socket_queue_tx.clone()),
             last_measurement_emit: Instant::now(),
-            laser_target,
+            last_minmax_emit: Instant::now(),
+            laser_target: laser_target.clone(),
+            diameter_tracker: DiameterTracker::new(laser_target.min_max_timeframe_minutes),
             emitted_default_state: false,
             diameter: Length::ZERO,
             x_diameter: None,

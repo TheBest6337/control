@@ -11,8 +11,15 @@ import { produce } from "immer";
 
 function useLaser(machine_identification_unique: MachineIdentificationUnique) {
   // Get consolidated state and live values from namespace
-  const { state, defaultState, diameter, x_diameter, y_diameter, roundness } =
-    useLaser1Namespace(machine_identification_unique);
+  const {
+    state,
+    defaultState,
+    diameter,
+    x_diameter,
+    y_diameter,
+    roundness,
+    minMaxDiameter,
+  } = useLaser1Namespace(machine_identification_unique);
 
   // Single optimistic state for all state management
   const stateOptimistic = useStateOptimistic<StateEvent>();
@@ -53,6 +60,13 @@ function useLaser(machine_identification_unique: MachineIdentificationUnique) {
   });
   const { request: requestHigherTolerance } = useMachineMutation(
     schemaHigherTolerance,
+  );
+
+  const schemaMinMaxTimeframe = z.object({
+    SetMinMaxTimeframe: z.number(),
+  });
+  const { request: requestMinMaxTimeframe } = useMachineMutation(
+    schemaMinMaxTimeframe,
   );
 
   // Action functions with verb-first names
@@ -101,6 +115,21 @@ function useLaser(machine_identification_unique: MachineIdentificationUnique) {
     );
   };
 
+  const setMinMaxTimeframe = (timeframe_minutes: number) => {
+    updateStateOptimistically(
+      (current) => {
+        current.data.laser_state.min_max_timeframe_minutes = timeframe_minutes;
+      },
+      () =>
+        requestMinMaxTimeframe({
+          machine_identification_unique,
+          data: {
+            SetMinMaxTimeframe: timeframe_minutes,
+          },
+        }),
+    );
+  };
+
   return {
     // Consolidated state
     state: stateOptimistic.value?.data,
@@ -114,6 +143,9 @@ function useLaser(machine_identification_unique: MachineIdentificationUnique) {
     y_diameter,
     roundness,
 
+    // Min/max diameter data
+    minMaxDiameter,
+
     // Loading states
     isLoading: stateOptimistic.isOptimistic,
     isDisabled: !stateOptimistic.isInitialized,
@@ -122,6 +154,7 @@ function useLaser(machine_identification_unique: MachineIdentificationUnique) {
     setTargetDiameter,
     setLowerTolerance,
     setHigherTolerance,
+    setMinMaxTimeframe,
   };
 }
 

@@ -42,16 +42,30 @@ export const stateEventDataSchema = z.object({
     higher_tolerance: z.number(),
     lower_tolerance: z.number(),
     target_diameter: z.number(),
+    min_max_timeframe_minutes: z.number(),
   }),
+});
+
+/**
+ * Min/Max diameter event from Laser (every second)
+ */
+export const minMaxDiameterEventDataSchema = z.object({
+  min_diameter: z.number().nullable(),
+  max_diameter: z.number().nullable(),
+  timeframe_minutes: z.number(),
 });
 
 // ========== Event Schemas with Wrappers ==========
 export const liveValuesEventSchema = eventSchema(liveValuesEventDataSchema);
 export const stateEventSchema = eventSchema(stateEventDataSchema);
+export const minMaxDiameterEventSchema = eventSchema(
+  minMaxDiameterEventDataSchema,
+);
 
 // ========== Type Inferences ==========
 export type LiveValuesEvent = z.infer<typeof liveValuesEventSchema>;
 export type StateEvent = z.infer<typeof stateEventSchema>;
+export type MinMaxDiameterEvent = z.infer<typeof minMaxDiameterEventSchema>;
 
 export type Laser1NamespaceStore = {
   // Single state event from server
@@ -63,6 +77,9 @@ export type Laser1NamespaceStore = {
   x_diameter: TimeSeries;
   y_diameter: TimeSeries;
   roundness: TimeSeries;
+
+  // Min/max diameter data
+  minMaxDiameter: MinMaxDiameterEvent | null;
 };
 
 // Constants for time durations
@@ -103,6 +120,7 @@ export const createLaser1NamespaceStore = (): StoreApi<Laser1NamespaceStore> =>
       x_diameter,
       y_diameter,
       roundness: roundness,
+      minMaxDiameter: null,
     };
   });
 
@@ -183,6 +201,14 @@ export function laser1MessageHandler(
             roundness: addRoundness(state.roundness, roundnessValue),
           }));
         }
+      }
+      // Min/max diameter events (updated every second)
+      else if (eventName === "MinMaxDiameterEvent") {
+        const minMaxEvent = minMaxDiameterEventSchema.parse(event);
+        updateStore((state) => ({
+          ...state,
+          minMaxDiameter: minMaxEvent,
+        }));
       } else {
         handleUnhandledEventError(eventName);
       }

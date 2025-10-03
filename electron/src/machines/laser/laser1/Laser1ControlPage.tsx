@@ -3,6 +3,7 @@ import { Page } from "@/components/Page";
 import React from "react";
 import { ControlGrid } from "@/control/ControlGrid";
 import { TimeSeriesValueNumeric } from "@/control/TimeSeriesValue";
+import { Icon } from "@/components/Icon";
 
 import { EditValue } from "@/control/EditValue";
 import { Label } from "@/control/Label";
@@ -84,42 +85,38 @@ export function Laser1ControlPage() {
 
           {/* Min/Max Diameter Information */}
           {minMaxDiameter?.data && (
-            <div className="mt-4 rounded-lg border bg-gray-50 p-3">
-              <div className="mb-2 text-sm font-medium text-gray-700">
-                Min/Max Diameter ({minMaxTimeframeMinutes} min window)
-              </div>
-              <div className="flex flex-row items-center gap-6">
-                {minMaxDiameter.data.min_diameter !== null && (
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-500">Min</span>
-                    <span className="font-mono text-lg text-blue-600">
-                      {minMaxDiameter.data.min_diameter.toFixed(3)} mm
-                    </span>
-                  </div>
-                )}
-                {minMaxDiameter.data.max_diameter !== null && (
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-500">Max</span>
-                    <span className="font-mono text-lg text-red-600">
-                      {minMaxDiameter.data.max_diameter.toFixed(3)} mm
-                    </span>
-                  </div>
-                )}
-                {minMaxDiameter.data.min_diameter !== null &&
-                  minMaxDiameter.data.max_diameter !== null && (
-                    <div className="flex flex-col">
-                      <span className="text-xs text-gray-500">Range</span>
-                      <span className="font-mono text-lg text-gray-800">
-                        {(
-                          minMaxDiameter.data.max_diameter -
-                          minMaxDiameter.data.min_diameter
-                        ).toFixed(3)}{" "}
-                        mm
-                      </span>
+            <>
+              {minMaxDiameter.data.min_diameter !== null && (
+                <div className="flex flex-row items-center gap-6">
+                  <Label label="Min Diameter">
+                    <div className="flex flex-row items-center gap-4">
+                      <Icon name="lu:ArrowDown" className="size-7" />
+                      <div className="flex flex-row items-center gap-2">
+                        <span className="font-mono text-4xl font-bold">
+                          {minMaxDiameter.data.min_diameter.toFixed(3)}
+                        </span>
+                        <span>mm</span>
+                      </div>
                     </div>
-                  )}
-              </div>
-            </div>
+                  </Label>
+                </div>
+              )}
+              {minMaxDiameter.data.max_diameter !== null && (
+                <div className="flex flex-row items-center gap-6">
+                  <Label label="Max Diameter">
+                    <div className="flex flex-row items-center gap-4">
+                      <Icon name="lu:ArrowUp" className="size-7" />
+                      <div className="flex flex-row items-center gap-2">
+                        <span className="font-mono text-4xl font-bold">
+                          {minMaxDiameter.data.max_diameter.toFixed(3)}
+                        </span>
+                        <span>mm</span>
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+              )}
+            </>
           )}
         </ControlCard>
         <ControlCard title="Settings">
@@ -173,7 +170,7 @@ export function Laser1ControlPage() {
               value={minMaxTimeframeMinutes}
               step={1}
               min={1}
-              max={1440} // 24 hours
+              max={300} // 5 hours
               renderValue={(value) => `${value} min`}
               onChange={(val) => setMinMaxTimeframe(val)}
               defaultValue={defaultState?.laser_state.min_max_timeframe_minutes}

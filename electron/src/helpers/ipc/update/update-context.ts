@@ -3,6 +3,8 @@ import {
   UPDATE_END,
   UPDATE_EXECUTE,
   UPDATE_LOG,
+  UPDATE_PROGRESS,
+  UpdateProgressData,
 } from "./update-channels";
 
 type UpdateExecuteInvokeParams = {
@@ -21,6 +23,7 @@ export function exposeUpdateContext() {
 
   let currentLogListener: ((event: any, log: string) => void) | null = null;
   let currentEndListener: ((event: any, params: any) => void) | null = null;
+  let currentProgressListener: ((event: any, data: UpdateProgressData) => void) | null = null;
 
   contextBridge.exposeInMainWorld("update", {
     execute: (params: UpdateExecuteInvokeParams) =>
@@ -51,6 +54,18 @@ export function exposeUpdateContext() {
       };
 
       ipcRenderer.on(UPDATE_END, currentEndListener);
+    },
+
+    onProgress: (callback: (data: UpdateProgressData) => void) => {
+      if (currentProgressListener) {
+        ipcRenderer.removeListener(UPDATE_PROGRESS, currentProgressListener);
+      }
+
+      currentProgressListener = (_event, data: UpdateProgressData) => {
+        callback(data);
+      };
+
+      ipcRenderer.on(UPDATE_PROGRESS, currentProgressListener);
     },
   });
 }

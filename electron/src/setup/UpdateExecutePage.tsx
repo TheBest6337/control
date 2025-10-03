@@ -3,11 +3,13 @@ import { Page } from "@/components/Page";
 import { SectionTitle } from "@/components/SectionTitle";
 import { Terminal } from "@/components/Terminal";
 import { TouchButton } from "@/components/touch/TouchButton";
+import { UpdateProgress } from "@/components/UpdateProgress";
 import { updateExecute, updateCancelWithStore } from "@/helpers/update_helpers";
 import { useUpdateStore } from "@/stores/updateStore";
 import { useSearch } from "@tanstack/react-router";
 import React, { useEffect } from "react";
 import { toast } from "sonner";
+import type { UpdateProgressData } from "@/helpers/ipc/update/update-channels";
 
 export function UpdateExecutePage() {
   const search = useSearch({
@@ -18,12 +20,22 @@ export function UpdateExecutePage() {
     isUpdating,
     terminalLines,
     currentUpdateInfo,
+    steps,
+    currentStepIndex,
+    gitProgress,
+    nixosPhase,
+    estimatedTimeRemaining,
     setUpdateInfo,
     startUpdate,
     stopUpdate,
     addTerminalLine,
     clearTerminalLines,
     resetUpdateState,
+    initializeSteps,
+    setStepStatus,
+    setGitProgress,
+    setNixosPhase,
+    updateTimeEstimate,
   } = useUpdateStore();
 
   // Set update info from search params when component mounts or search changes
@@ -40,6 +52,17 @@ export function UpdateExecutePage() {
     }
   }, [search, isUpdating, setUpdateInfo]);
 
+  const handleProgressUpdate = (data: UpdateProgressData) => {
+    if (data.type === "step-change" && data.step) {
+      setStepStatus(data.step, "in-progress");
+      updateTimeEstimate();
+    } else if (data.type === "git-progress" && data.gitPercent !== undefined) {
+      setGitProgress(data.gitPercent);
+    } else if (data.type === "nixos-progress" && data.nixosPhase) {
+      setNixosPhase(data.nixosPhase);
+    }
+  };
+
   const handleClick = async () => {
     const updateInfo = currentUpdateInfo || {
       githubRepoOwner: search.githubRepoOwner,
@@ -50,9 +73,24 @@ export function UpdateExecutePage() {
       commit: search.commit,
     };
 
+    initializeSteps();
     startUpdate();
-    // Perhaps we just need to clear the logs ?
-    const res = await updateExecute(updateInfo, addTerminalLine);
+    
+    const res = await updateExecute(
+      updateInfo, 
+      addTerminalLine,
+      handleProgressUpdate
+    );
+    
+    // Mark all steps as completed on success
+    if (res.success) {
+      steps.forEach(step => {
+        if (step.status === "in-progress") {
+          setStepStatus(step.name, "completed");
+        }
+      });
+    }
+    
     stopUpdate();
 
     if (res.success) {
@@ -104,6 +142,7 @@ export function UpdateExecutePage() {
           </TouchButton>
         )}
       </div>
+
       {currentUpdateInfo && (
         <Alert title="Update Information" variant="info">
           <div className="space-y-3">
@@ -129,13 +168,19 @@ export function UpdateExecutePage() {
                 </div>
               )}
             </div>
-            <div className="text-sm">
-              Please stay connected to the internet and leave the power on. The
-              update procedure takes a couple of minutes and reboots the machine
-              afterwards.
-            </div>
           </div>
         </Alert>
+      )}
+
+      {/* Progress Indicator */}
+      {isUpdating && (
+        <UpdateProgress
+          steps={steps}
+          currentStepIndex={currentStepIndex}
+          gitProgress={gitProgress}
+          nixosPhase={nixosPhase}
+          estimatedTimeRemaining={estimatedTimeRemaining}
+        />
       )}
 
       <Terminal

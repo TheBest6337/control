@@ -46,6 +46,7 @@ interface UpdateContext {
   onEnd: (
     callback: (params: { success: boolean; error?: string }) => void,
   ) => void;
+  onProgress: (callback: (data: import("./helpers/ipc/update/update-channels").UpdateProgressData) => void) => void;
 }
 
 interface TroubleshootContext {

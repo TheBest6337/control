@@ -6,6 +6,7 @@ type UpdateProgressProps = {
   steps: UpdateStep[];
   currentStepIndex: number;
   gitProgress?: number;
+  nixosProgress?: number;
   nixosPhase?: string;
   estimatedTimeRemaining?: number | null;
 };
@@ -14,6 +15,7 @@ export function UpdateProgress({
   steps,
   currentStepIndex,
   gitProgress = 0,
+  nixosProgress = 0,
   nixosPhase = "",
   estimatedTimeRemaining = null,
 }: UpdateProgressProps) {
@@ -36,6 +38,9 @@ export function UpdateProgress({
       // Special handling for git clone step with progress
       if (currentStep.name === "clone-repo" && gitProgress > 0) {
         progress += (gitProgress / 100) * stepWeight;
+      } else if (currentStep.name === "nixos-build" && nixosProgress > 0) {
+        // Special handling for nixos-build step with progress
+        progress += (nixosProgress / 100) * stepWeight;
       } else {
         // For other steps, assume 50% progress if in-progress
         progress += 0.5 * stepWeight;
@@ -171,12 +176,28 @@ export function UpdateProgress({
                   </div>
                 )}
 
-              {/* NixOS Build Phase */}
+              {/* NixOS Build Progress */}
               {step.name === "nixos-build" &&
-                step.status === "in-progress" &&
-                nixosPhase && (
-                  <div className="mt-1 text-xs text-gray-600">
-                    {nixosPhase}
+                step.status === "in-progress" && (
+                  <div className="mt-1 space-y-1">
+                    {/* Show phase description */}
+                    {nixosPhase && (
+                      <div className="text-xs text-gray-600">{nixosPhase}</div>
+                    )}
+                    {/* Show progress bar if we have progress data */}
+                    {nixosProgress > 0 && (
+                      <div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                            style={{ width: `${nixosProgress}%` }}
+                          />
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {Math.round(nixosProgress)}%
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
             </div>

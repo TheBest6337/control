@@ -7,7 +7,6 @@ export const UPDATE_PROGRESS = "update:progress";
 export type UpdateStepName =
   | "clear-repo"
   | "clone-repo"
-  | "checkout"
   | "prepare"
   | "nixos-build"
   | "finalize";
@@ -28,6 +27,7 @@ export type UpdateProgressData = {
   step?: UpdateStepName;
   status?: UpdateStepStatus;
   gitPercent?: number;
+  nixosPercent?: number;
   nixosPhase?: string;
   currentDerivation?: string;
 };

@@ -108,6 +108,13 @@ async function update(
           commit,
         } = params;
 
+        // Reset NixOS build progress tracking
+        nixosBuildPhaseProgress = {
+          totalDerivations: 0,
+          builtDerivations: 0,
+          currentPhase: "",
+        };
+
         // Implement your update logic here
         console.log("Update parameters:", {
           githubRepoOwner,
@@ -339,12 +346,6 @@ async function cloneRepository(
   if (commit && cmd1.success) {
     const repoDir = `${homeDir}/${githubRepoName}`;
     
-    event.sender.send(UPDATE_PROGRESS, {
-      type: "step-change",
-      step: "checkout",
-      status: "in-progress",
-    } as UpdateProgressData);
-    
     const cmd2 = await runCommand("git", ["checkout", commit], repoDir, event);
 
     if (!cmd2.success) {
@@ -358,13 +359,6 @@ async function cloneRepository(
       UPDATE_LOG,
       terminalSuccess(`Successfully checked out commit: ${commit}`),
     );
-
-    // Mark checkout as completed
-    event.sender.send(UPDATE_PROGRESS, {
-      type: "step-change",
-      step: "checkout",
-      status: "completed",
-    } as UpdateProgressData);
   }
   event.sender.send(
     UPDATE_LOG,
@@ -498,15 +492,49 @@ function parseGitProgress(
   }
 }
 
+// Track NixOS build progress
+let nixosBuildPhaseProgress = {
+  totalDerivations: 0,
+  builtDerivations: 0,
+  currentPhase: "",
+};
+
 function parseNixosBuildOutput(
   output: string,
   event: Electron.IpcMainInvokeEvent,
 ): void {
+  // Track derivations to build - these appear at the start
+  // Format: "these N derivations will be built:"
+  const derivationsMatch = output.match(/these (\d+) derivations? will be built/i);
+  if (derivationsMatch) {
+    nixosBuildPhaseProgress.totalDerivations = parseInt(derivationsMatch[1], 10);
+    nixosBuildPhaseProgress.builtDerivations = 0;
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: `Preparing to build ${nixosBuildPhaseProgress.totalDerivations} packages...`,
+      nixosPercent: 0,
+    } as UpdateProgressData);
+    return;
+  }
+
+  // Track paths to copy/fetch
+  const pathsMatch = output.match(/these (\d+) paths? will be (?:fetched|copied)/i);
+  if (pathsMatch) {
+    const pathCount = parseInt(pathsMatch[1], 10);
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: `Fetching ${pathCount} dependencies...`,
+      nixosPercent: 5,
+    } as UpdateProgressData);
+    return;
+  }
+
   // Detect various NixOS build phases
   if (output.includes("copying path") || output.includes("copying ")) {
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Copying dependencies...",
+      nixosPercent: 10,
     } as UpdateProgressData);
   } else if (
     output.includes("building '/nix/store/") ||
@@ -515,9 +543,24 @@ function parseNixosBuildOutput(
     // Extract what's being built
     const buildMatch = output.match(/building ['"]?\/nix\/store\/[^-]+-([^'"]+)/);
     const packageName = buildMatch ? buildMatch[1].replace(".drv", "") : "";
+    
+    // Increment built derivations counter
+    nixosBuildPhaseProgress.builtDerivations++;
+    
+    // Calculate progress based on derivations built
+    let percent = 15; // Start after dependency copying
+    if (nixosBuildPhaseProgress.totalDerivations > 0) {
+      // Map derivation progress to 15-85% of total progress
+      const derivationProgress = nixosBuildPhaseProgress.builtDerivations / nixosBuildPhaseProgress.totalDerivations;
+      percent = 15 + Math.floor(derivationProgress * 70);
+    }
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
-      nixosPhase: packageName ? `Building ${packageName}...` : "Building packages...",
+      nixosPhase: packageName 
+        ? `Building ${packageName}... (${nixosBuildPhaseProgress.builtDerivations}/${nixosBuildPhaseProgress.totalDerivations})`
+        : "Building packages...",
+      nixosPercent: percent,
       currentDerivation: packageName,
     } as UpdateProgressData);
   } else if (
@@ -559,6 +602,7 @@ function parseNixosBuildOutput(
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Installing packages...",
+      nixosPercent: 88,
     } as UpdateProgressData);
   } else if (
     output.includes("post-installation") ||
@@ -567,6 +611,7 @@ function parseNixosBuildOutput(
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Running post-installation...",
+      nixosPercent: 92,
     } as UpdateProgressData);
   } else if (
     output.includes("updating GRUB") ||
@@ -581,6 +626,7 @@ function parseNixosBuildOutput(
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Updating bootloader...",
+      nixosPercent: 95,
     } as UpdateProgressData);
   } else if (
     output.includes("building the system configuration") ||
@@ -589,6 +635,7 @@ function parseNixosBuildOutput(
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Building system configuration...",
+      nixosPercent: 12,
     } as UpdateProgressData);
   }
 }

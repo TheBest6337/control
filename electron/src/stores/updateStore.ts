@@ -59,7 +59,6 @@ const getAverageDuration = (stepName: UpdateStepName): number => {
     const defaults: Record<UpdateStepName, number> = {
       "clear-repo": 2,
       "clone-repo": 120,
-      checkout: 5,
       prepare: 3,
       "nixos-build": 600,
       finalize: 20,
@@ -78,6 +77,7 @@ export type UpdateState = {
   steps: UpdateStep[];
   currentStepIndex: number;
   gitProgress: number; // 0-100
+  nixosProgress: number; // 0-100
   nixosPhase: string;
   estimatedTimeRemaining: number | null; // in seconds
 };
@@ -92,6 +92,7 @@ export type UpdateActions = {
   initializeSteps: () => void;
   setStepStatus: (stepName: UpdateStepName, status: UpdateStepStatus) => void;
   setGitProgress: (percent: number) => void;
+  setNixosProgress: (percent: number) => void;
   setNixosPhase: (phase: string) => void;
   updateTimeEstimate: () => void;
 };
@@ -110,12 +111,6 @@ const createInitialSteps = (): UpdateStep[] => [
     displayName: "Clone repository",
     status: "pending",
     estimatedDuration: getAverageDuration("clone-repo"),
-  },
-  {
-    name: "checkout",
-    displayName: "Checkout version",
-    status: "pending",
-    estimatedDuration: getAverageDuration("checkout"),
   },
   {
     name: "prepare",
@@ -144,6 +139,7 @@ const initialState: UpdateState = {
   steps: createInitialSteps(),
   currentStepIndex: -1,
   gitProgress: 0,
+  nixosProgress: 0,
   nixosPhase: "",
   estimatedTimeRemaining: null,
 };
@@ -223,6 +219,7 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
         state.steps = createInitialSteps();
         state.currentStepIndex = -1;
         state.gitProgress = 0;
+        state.nixosProgress = 0;
         state.nixosPhase = "";
         state.estimatedTimeRemaining = null;
       }),
@@ -234,6 +231,7 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
         state.steps = createInitialSteps();
         state.currentStepIndex = -1;
         state.gitProgress = 0;
+        state.nixosProgress = 0;
         state.nixosPhase = "";
         state.estimatedTimeRemaining = null;
       }),
@@ -269,6 +267,13 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
     set(
       produce((state: UpdateState) => {
         state.gitProgress = Math.min(100, Math.max(0, percent));
+      }),
+    ),
+
+  setNixosProgress: (percent: number) =>
+    set(
+      produce((state: UpdateState) => {
+        state.nixosProgress = Math.min(100, Math.max(0, percent));
       }),
     ),
 

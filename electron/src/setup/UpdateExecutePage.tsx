@@ -23,6 +23,7 @@ export function UpdateExecutePage() {
     steps,
     currentStepIndex,
     gitProgress,
+    nixosProgress,
     nixosPhase,
     estimatedTimeRemaining,
     setUpdateInfo,
@@ -34,6 +35,7 @@ export function UpdateExecutePage() {
     initializeSteps,
     setStepStatus,
     setGitProgress,
+    setNixosProgress,
     setNixosPhase,
     updateTimeEstimate,
   } = useUpdateStore();
@@ -60,8 +62,13 @@ export function UpdateExecutePage() {
       updateTimeEstimate();
     } else if (data.type === "git-progress" && data.gitPercent !== undefined) {
       setGitProgress(data.gitPercent);
-    } else if (data.type === "nixos-progress" && data.nixosPhase) {
-      setNixosPhase(data.nixosPhase);
+    } else if (data.type === "nixos-progress") {
+      if (data.nixosPhase) {
+        setNixosPhase(data.nixosPhase);
+      }
+      if (data.nixosPercent !== undefined) {
+        setNixosProgress(data.nixosPercent);
+      }
     }
   };
 
@@ -180,6 +187,7 @@ export function UpdateExecutePage() {
           steps={steps}
           currentStepIndex={currentStepIndex}
           gitProgress={gitProgress}
+          nixosProgress={nixosProgress}
           nixosPhase={nixosPhase}
           estimatedTimeRemaining={estimatedTimeRemaining}
         />

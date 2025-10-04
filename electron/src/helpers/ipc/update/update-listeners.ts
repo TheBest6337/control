@@ -4,6 +4,8 @@ import {
   UPDATE_END,
   UPDATE_EXECUTE,
   UPDATE_LOG,
+  UPDATE_PROGRESS,
+  UpdateProgressData,
 } from "./update-channels";
 import { spawn, ChildProcess } from "child_process";
 import tkill from "@jub3i/tree-kill";
@@ -128,6 +130,11 @@ async function update(
         }
 
         // 1. first make sure the clone path is empty by deleting it if it containsa .git folder
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "clear-repo",
+        } as UpdateProgressData);
+
         const repoDir = `${homeDir}/${githubRepoName}`;
         const clearResult = await clearRepoDirectory(
           `${homeDir}/${githubRepoName}`,
@@ -139,6 +146,10 @@ async function update(
         }
 
         // 2. clone the repository
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "clone-repo",
+        } as UpdateProgressData);
         const cloneResult = await cloneRepository(
           {
             githubRepoOwner,
@@ -156,6 +167,11 @@ async function update(
         }
 
         // 3. make the nixos-install.sh script executable
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "prepare",
+        } as UpdateProgressData);
+
         const chmodResult = await runCommand(
           "chmod",
           ["+x", "nixos-install.sh"],
@@ -168,6 +184,10 @@ async function update(
         }
 
         // 4. run the nixos-install.sh script
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "nixos-build",
+        } as UpdateProgressData);
         const installResult = await runCommand(
           "./nixos-install.sh",
           [],
@@ -244,7 +264,7 @@ async function cloneRepository(
     : `https://github.com/${githubRepoOwner}/${githubRepoName}.git`;
 
   // Determine clone arguments based on whether tag, branch, or commit is specified
-  const cloneArgs = ["clone", repoUrl];
+  const cloneArgs = ["clone", "--progress", repoUrl];
 
   if (tag) {
     // Clone a specific tag
@@ -279,6 +299,12 @@ async function cloneRepository(
   // If commit is specified, checkout the specific commit
   if (commit && cmd1.success) {
     const repoDir = `${homeDir}/${githubRepoName}`;
+    
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "step-change",
+      step: "checkout",
+    } as UpdateProgressData);
+    
     const cmd2 = await runCommand("git", ["checkout", commit], repoDir, event);
 
     if (!cmd2.success) {
@@ -326,6 +352,11 @@ async function runCommand(
       const log = data.toString();
       console.log(log);
       event.sender.send(UPDATE_LOG, log);
+
+      // Parse NixOS build output
+      if (cmd.includes("nixos-install.sh") || cmd === "nixos-rebuild") {
+        parseNixosBuildOutput(log, event);
+      }
     });
 
     // Stream stderr logs back to renderer
@@ -333,6 +364,16 @@ async function runCommand(
       const log = data.toString();
       console.error(log);
       event.sender.send(UPDATE_LOG, log);
+
+      // Git outputs progress to stderr
+      if (cmd === "git" && args.includes("--progress")) {
+        parseGitProgress(log, event);
+      }
+
+      // NixOS also outputs some info to stderr
+      if (cmd.includes("nixos-install.sh") || cmd === "nixos-rebuild") {
+        parseNixosBuildOutput(log, event);
+      }
     });
 
     // Handle process completion
@@ -383,6 +424,124 @@ async function runCommand(
   } catch (error: any) {
     event.sender.send(UPDATE_LOG, terminalError(`Error: ${error.toString()}`));
     return { success: false, error: error.toString() };
+  }
+}
+
+function parseGitProgress(
+  output: string,
+  event: Electron.IpcMainInvokeEvent,
+): void {
+  // Git progress format: "Receiving objects: 45% (234/520)"
+  // or "Resolving deltas: 100% (150/150)"
+  const receivingMatch = output.match(/Receiving objects:\s*(\d+)%/);
+  const resolvingMatch = output.match(/Resolving deltas:\s*(\d+)%/);
+
+  if (receivingMatch) {
+    const percent = parseInt(receivingMatch[1], 10);
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "git-progress",
+      gitPercent: percent * 0.8, // Receiving is 80% of clone
+    } as UpdateProgressData);
+  } else if (resolvingMatch) {
+    const percent = parseInt(resolvingMatch[1], 10);
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "git-progress",
+      gitPercent: 80 + percent * 0.2, // Resolving is last 20%
+    } as UpdateProgressData);
+  }
+}
+
+function parseNixosBuildOutput(
+  output: string,
+  event: Electron.IpcMainInvokeEvent,
+): void {
+  // Detect various NixOS build phases
+  if (output.includes("copying path") || output.includes("copying ")) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Copying dependencies...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("building '/nix/store/") ||
+    output.includes("building /nix/store/")
+  ) {
+    // Extract what's being built
+    const buildMatch = output.match(/building ['"]?\/nix\/store\/[^-]+-([^'"]+)/);
+    const packageName = buildMatch ? buildMatch[1].replace(".drv", "") : "";
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: packageName ? `Building ${packageName}...` : "Building packages...",
+      currentDerivation: packageName,
+    } as UpdateProgressData);
+  } else if (
+    output.includes("unpacking") ||
+    output.includes("Unpacking")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Unpacking sources...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("patching") ||
+    output.includes("Patching")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Patching sources...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("configuring") ||
+    output.includes("Configuring")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Configuring build...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("building") &&
+    !output.includes("building '/nix/store/")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Compiling...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("installing") ||
+    output.includes("Installing")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Installing packages...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("post-installation") ||
+    output.includes("post-install")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Running post-installation...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("updating GRUB") ||
+    output.includes("installing bootloader") ||
+    output.includes("updating bootloader")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "step-change",
+      step: "finalize",
+    } as UpdateProgressData);
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Updating bootloader...",
+    } as UpdateProgressData);
+  } else if (
+    output.includes("building the system configuration") ||
+    output.includes("building system")
+  ) {
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "nixos-progress",
+      nixosPhase: "Building system configuration...",
+    } as UpdateProgressData);
   }
 }
 

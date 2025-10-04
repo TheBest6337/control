@@ -113,6 +113,7 @@ async function update(
           totalDerivations: 0,
           builtDerivations: 0,
           currentPhase: "",
+          maxPercent: 0,
         };
 
         // Implement your update logic here
@@ -345,7 +346,7 @@ async function cloneRepository(
   // If commit is specified, checkout the specific commit
   if (commit && cmd1.success) {
     const repoDir = `${homeDir}/${githubRepoName}`;
-    
+
     const cmd2 = await runCommand("git", ["checkout", commit], repoDir, event);
 
     if (!cmd2.success) {
@@ -497,6 +498,7 @@ let nixosBuildPhaseProgress = {
   totalDerivations: 0,
   builtDerivations: 0,
   currentPhase: "",
+  maxPercent: 0, // Track max to prevent backward movement
 };
 
 function parseNixosBuildOutput(
@@ -505,10 +507,16 @@ function parseNixosBuildOutput(
 ): void {
   // Track derivations to build - these appear at the start
   // Format: "these N derivations will be built:"
-  const derivationsMatch = output.match(/these (\d+) derivations? will be built/i);
+  const derivationsMatch = output.match(
+    /these (\d+) derivations? will be built/i,
+  );
   if (derivationsMatch) {
-    nixosBuildPhaseProgress.totalDerivations = parseInt(derivationsMatch[1], 10);
+    nixosBuildPhaseProgress.totalDerivations = parseInt(
+      derivationsMatch[1],
+      10,
+    );
     nixosBuildPhaseProgress.builtDerivations = 0;
+    nixosBuildPhaseProgress.maxPercent = 0; // Reset max percent tracker
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: `Preparing to build ${nixosBuildPhaseProgress.totalDerivations} packages...`,
@@ -518,7 +526,9 @@ function parseNixosBuildOutput(
   }
 
   // Track paths to copy/fetch
-  const pathsMatch = output.match(/these (\d+) paths? will be (?:fetched|copied)/i);
+  const pathsMatch = output.match(
+    /these (\d+) paths? will be (?:fetched|copied)/i,
+  );
   if (pathsMatch) {
     const pathCount = parseInt(pathsMatch[1], 10);
     event.sender.send(UPDATE_PROGRESS, {
@@ -541,48 +551,47 @@ function parseNixosBuildOutput(
     output.includes("building /nix/store/")
   ) {
     // Extract what's being built
-    const buildMatch = output.match(/building ['"]?\/nix\/store\/[^-]+-([^'"]+)/);
+    const buildMatch = output.match(
+      /building ['"]?\/nix\/store\/[^-]+-([^'"]+)/,
+    );
     const packageName = buildMatch ? buildMatch[1].replace(".drv", "") : "";
-    
+
     // Increment built derivations counter
     nixosBuildPhaseProgress.builtDerivations++;
-    
+
     // Calculate progress based on derivations built
     let percent = 15; // Start after dependency copying
     if (nixosBuildPhaseProgress.totalDerivations > 0) {
       // Map derivation progress to 15-85% of total progress
-      const derivationProgress = nixosBuildPhaseProgress.builtDerivations / nixosBuildPhaseProgress.totalDerivations;
+      const derivationProgress =
+        nixosBuildPhaseProgress.builtDerivations /
+        nixosBuildPhaseProgress.totalDerivations;
       percent = 15 + Math.floor(derivationProgress * 70);
     }
-    
+
+    // Only move forward, never backward (prevents issues with micro sectors)
+    percent = Math.max(percent, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
-      nixosPhase: packageName 
+      nixosPhase: packageName
         ? `Building ${packageName}... (${nixosBuildPhaseProgress.builtDerivations}/${nixosBuildPhaseProgress.totalDerivations})`
         : "Building packages...",
       nixosPercent: percent,
       currentDerivation: packageName,
     } as UpdateProgressData);
-  } else if (
-    output.includes("unpacking") ||
-    output.includes("Unpacking")
-  ) {
+  } else if (output.includes("unpacking") || output.includes("Unpacking")) {
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Unpacking sources...",
     } as UpdateProgressData);
-  } else if (
-    output.includes("patching") ||
-    output.includes("Patching")
-  ) {
+  } else if (output.includes("patching") || output.includes("Patching")) {
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Patching sources...",
     } as UpdateProgressData);
-  } else if (
-    output.includes("configuring") ||
-    output.includes("Configuring")
-  ) {
+  } else if (output.includes("configuring") || output.includes("Configuring")) {
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Configuring build...",
@@ -595,10 +604,7 @@ function parseNixosBuildOutput(
       type: "nixos-progress",
       nixosPhase: "Compiling...",
     } as UpdateProgressData);
-  } else if (
-    output.includes("installing") ||
-    output.includes("Installing")
-  ) {
+  } else if (output.includes("installing") || output.includes("Installing")) {
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Installing packages...",

@@ -23,7 +23,9 @@ export function exposeUpdateContext() {
 
   let currentLogListener: ((event: any, log: string) => void) | null = null;
   let currentEndListener: ((event: any, params: any) => void) | null = null;
-  let currentProgressListener: ((event: any, data: UpdateProgressData) => void) | null = null;
+  let currentProgressListener:
+    | ((event: any, data: UpdateProgressData) => void)
+    | null = null;
 
   contextBridge.exposeInMainWorld("update", {
     execute: (params: UpdateExecuteInvokeParams) =>

@@ -3,6 +3,7 @@ import { Page } from "@/components/Page";
 import React from "react";
 import { ControlGrid } from "@/control/ControlGrid";
 import { TimeSeriesValueNumeric } from "@/control/TimeSeriesValue";
+import { Icon } from "@/components/Icon";
 
 import { EditValue } from "@/control/EditValue";
 import { Label } from "@/control/Label";
@@ -19,15 +20,19 @@ export function Laser1ControlPage() {
     roundness,
     state,
     defaultState,
+    minMaxDiameter,
     setTargetDiameter,
     setLowerTolerance,
     setHigherTolerance,
+    setMinMaxTimeframe,
   } = useLaser1();
 
   // Extract values from consolidated state
   const targetDiameter = state?.laser_state?.target_diameter ?? 0;
   const lowerTolerance = state?.laser_state?.lower_tolerance ?? 0;
   const higherTolerance = state?.laser_state?.higher_tolerance ?? 0;
+  const minMaxTimeframeMinutes =
+    state?.laser_state?.min_max_timeframe_minutes ?? 30;
   return (
     <Page>
       <ControlGrid columns={2}>
@@ -77,6 +82,42 @@ export function Laser1ControlPage() {
               />
             </div>
           )}
+
+          {/* Min/Max Diameter Information */}
+          {minMaxDiameter?.data && (
+            <>
+              {minMaxDiameter.data.min_diameter !== null && (
+                <div className="flex flex-row items-center gap-6">
+                  <Label label="Min Diameter">
+                    <div className="flex flex-row items-center gap-4">
+                      <Icon name="lu:ArrowDown" className="size-7" />
+                      <div className="flex flex-row items-center gap-2">
+                        <span className="font-mono text-4xl font-bold">
+                          {minMaxDiameter.data.min_diameter.toFixed(3)}
+                        </span>
+                        <span>mm</span>
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+              )}
+              {minMaxDiameter.data.max_diameter !== null && (
+                <div className="flex flex-row items-center gap-6">
+                  <Label label="Max Diameter">
+                    <div className="flex flex-row items-center gap-4">
+                      <Icon name="lu:ArrowUp" className="size-7" />
+                      <div className="flex flex-row items-center gap-2">
+                        <span className="font-mono text-4xl font-bold">
+                          {minMaxDiameter.data.max_diameter.toFixed(3)}
+                        </span>
+                        <span>mm</span>
+                      </div>
+                    </div>
+                  </Label>
+                </div>
+              )}
+            </>
+          )}
         </ControlCard>
         <ControlCard title="Settings">
           <Label label="Set Target Diameter">
@@ -121,6 +162,18 @@ export function Laser1ControlPage() {
               renderValue={(value) => value.toFixed(2)}
               onChange={(val) => setHigherTolerance(val)}
               defaultValue={defaultState?.laser_state.higher_tolerance}
+            />
+          </Label>
+          <Label label="Min/Max Tracking Timeframe">
+            <EditValue
+              title="Set Min/Max Tracking Timeframe"
+              value={minMaxTimeframeMinutes}
+              step={1}
+              min={1}
+              max={300} // 5 hours
+              renderValue={(value) => `${value} min`}
+              onChange={(val) => setMinMaxTimeframe(val)}
+              defaultValue={defaultState?.laser_state.min_max_timeframe_minutes}
             />
           </Label>
         </ControlCard>

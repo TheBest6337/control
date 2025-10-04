@@ -19,6 +19,17 @@ export function UpdateProgress({
   nixosPhase = "",
   estimatedTimeRemaining = null,
 }: UpdateProgressProps) {
+  // Track max progress to prevent backward movement
+  const maxProgressRef = React.useRef(0);
+
+  // Reset max progress when update starts fresh
+  React.useEffect(() => {
+    const allPending = steps.every((s) => s.status === "pending");
+    if (allPending) {
+      maxProgressRef.current = 0;
+    }
+  }, [steps]);
+
   // Calculate overall progress percentage
   const calculateOverallProgress = (): number => {
     const completedSteps = steps.filter((s) => s.status === "completed").length;
@@ -60,6 +71,10 @@ export function UpdateProgress({
       }
       // Pending steps contribute 0
     });
+
+    // Ensure progress never goes backward
+    progress = Math.max(progress, maxProgressRef.current);
+    maxProgressRef.current = progress;
 
     return Math.min(100, Math.max(0, progress));
   };

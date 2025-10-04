@@ -531,20 +531,27 @@ function parseNixosBuildOutput(
   );
   if (pathsMatch) {
     const pathCount = parseInt(pathsMatch[1], 10);
+    const percent = Math.max(5, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: `Fetching ${pathCount} dependencies...`,
-      nixosPercent: 5,
+      nixosPercent: percent,
     } as UpdateProgressData);
     return;
   }
 
   // Detect various NixOS build phases
   if (output.includes("copying path") || output.includes("copying ")) {
+    // Only update if this moves progress forward
+    const percent = Math.max(10, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Copying dependencies...",
-      nixosPercent: 10,
+      nixosPercent: percent,
     } as UpdateProgressData);
   } else if (
     output.includes("building '/nix/store/") ||
@@ -605,25 +612,34 @@ function parseNixosBuildOutput(
       nixosPhase: "Compiling...",
     } as UpdateProgressData);
   } else if (output.includes("installing") || output.includes("Installing")) {
+    const percent = Math.max(88, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Installing packages...",
-      nixosPercent: 88,
+      nixosPercent: percent,
     } as UpdateProgressData);
   } else if (
     output.includes("post-installation") ||
     output.includes("post-install")
   ) {
+    const percent = Math.max(92, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Running post-installation...",
-      nixosPercent: 92,
+      nixosPercent: percent,
     } as UpdateProgressData);
   } else if (
     output.includes("updating GRUB") ||
     output.includes("installing bootloader") ||
     output.includes("updating bootloader")
   ) {
+    const percent = Math.max(95, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "step-change",
       step: "finalize",
@@ -632,16 +648,19 @@ function parseNixosBuildOutput(
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Updating bootloader...",
-      nixosPercent: 95,
+      nixosPercent: percent,
     } as UpdateProgressData);
   } else if (
     output.includes("building the system configuration") ||
     output.includes("building system")
   ) {
+    const percent = Math.max(12, nixosBuildPhaseProgress.maxPercent);
+    nixosBuildPhaseProgress.maxPercent = percent;
+    
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Building system configuration...",
-      nixosPercent: 12,
+      nixosPercent: percent,
     } as UpdateProgressData);
   }
 }

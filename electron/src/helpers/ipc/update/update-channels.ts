@@ -26,6 +26,7 @@ export type UpdateStep = {
 export type UpdateProgressData = {
   type: "step-change" | "git-progress" | "nixos-progress";
   step?: UpdateStepName;
+  status?: UpdateStepStatus;
   gitPercent?: number;
   nixosPhase?: string;
   currentDerivation?: string;

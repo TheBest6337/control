@@ -133,6 +133,7 @@ async function update(
         event.sender.send(UPDATE_PROGRESS, {
           type: "step-change",
           step: "clear-repo",
+          status: "in-progress",
         } as UpdateProgressData);
 
         const repoDir = `${homeDir}/${githubRepoName}`;
@@ -145,10 +146,18 @@ async function update(
           return;
         }
 
+        // Mark clear-repo as completed
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "clear-repo",
+          status: "completed",
+        } as UpdateProgressData);
+
         // 2. clone the repository
         event.sender.send(UPDATE_PROGRESS, {
           type: "step-change",
           step: "clone-repo",
+          status: "in-progress",
         } as UpdateProgressData);
         const cloneResult = await cloneRepository(
           {
@@ -166,10 +175,18 @@ async function update(
           return;
         }
 
+        // Mark clone-repo as completed
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "clone-repo",
+          status: "completed",
+        } as UpdateProgressData);
+
         // 3. make the nixos-install.sh script executable
         event.sender.send(UPDATE_PROGRESS, {
           type: "step-change",
           step: "prepare",
+          status: "in-progress",
         } as UpdateProgressData);
 
         const chmodResult = await runCommand(
@@ -183,10 +200,18 @@ async function update(
           return;
         }
 
+        // Mark prepare as completed
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "prepare",
+          status: "completed",
+        } as UpdateProgressData);
+
         // 4. run the nixos-install.sh script
         event.sender.send(UPDATE_PROGRESS, {
           type: "step-change",
           step: "nixos-build",
+          status: "in-progress",
         } as UpdateProgressData);
         const installResult = await runCommand(
           "./nixos-install.sh",
@@ -198,6 +223,20 @@ async function update(
           event.sender.send(UPDATE_LOG, installResult.error);
           return;
         }
+
+        // Mark nixos-build as completed
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "nixos-build",
+          status: "completed",
+        } as UpdateProgressData);
+
+        // Mark finalize as completed (bootloader update is part of nixos-install.sh)
+        event.sender.send(UPDATE_PROGRESS, {
+          type: "step-change",
+          step: "finalize",
+          status: "completed",
+        } as UpdateProgressData);
 
         resolve();
       } catch (error: any) {
@@ -303,6 +342,7 @@ async function cloneRepository(
     event.sender.send(UPDATE_PROGRESS, {
       type: "step-change",
       step: "checkout",
+      status: "in-progress",
     } as UpdateProgressData);
     
     const cmd2 = await runCommand("git", ["checkout", commit], repoDir, event);
@@ -318,6 +358,13 @@ async function cloneRepository(
       UPDATE_LOG,
       terminalSuccess(`Successfully checked out commit: ${commit}`),
     );
+
+    // Mark checkout as completed
+    event.sender.send(UPDATE_PROGRESS, {
+      type: "step-change",
+      step: "checkout",
+      status: "completed",
+    } as UpdateProgressData);
   }
   event.sender.send(
     UPDATE_LOG,
@@ -529,6 +576,7 @@ function parseNixosBuildOutput(
     event.sender.send(UPDATE_PROGRESS, {
       type: "step-change",
       step: "finalize",
+      status: "in-progress",
     } as UpdateProgressData);
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",

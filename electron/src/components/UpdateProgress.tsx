@@ -27,30 +27,39 @@ export function UpdateProgress({
     if (completedSteps === totalSteps) return 100;
     if (completedSteps === 0 && currentStepIndex === -1) return 0;
 
-    // Base progress from completed steps
-    let progress = (completedSteps / totalSteps) * 100;
+    // Define step weights (should total 100%)
+    const stepWeights: Record<string, number> = {
+      "clear-repo": 5,
+      "clone-repo": 20,
+      prepare: 5,
+      "nixos-build": 60,
+      finalize: 10,
+    };
 
-    // Add progress from current step
-    const currentStep = steps[currentStepIndex];
-    if (currentStep && currentStep.status === "in-progress") {
-      // Git clone should be ~20% of total progress, nixos-build ~60%
-      if (currentStep.name === "clone-repo" && gitProgress > 0) {
-        // Git clone contributes up to 20% of overall progress
-        progress += (gitProgress / 100) * 20;
-      } else if (currentStep.name === "nixos-build" && nixosProgress > 0) {
-        // NixOS build contributes up to 60% of overall progress
-        progress += (nixosProgress / 100) * 60;
-      } else {
-        // Other steps (clear: 5%, prepare: 5%, finalize: 10%)
-        const stepWeight =
-          currentStep.name === "clear-repo"
-            ? 5
-            : currentStep.name === "prepare"
-              ? 5
-              : 10;
-        progress += 0.5 * stepWeight; // Assume 50% if in-progress
+    // Calculate progress based on completed and in-progress steps
+    let progress = 0;
+
+    steps.forEach((step, index) => {
+      const weight = stepWeights[step.name] || 0;
+
+      if (step.status === "completed") {
+        // Add full weight for completed steps
+        progress += weight;
+      } else if (step.status === "in-progress") {
+        // Add partial weight based on step progress
+        if (step.name === "clone-repo" && gitProgress > 0) {
+          // Git clone uses actual progress percentage
+          progress += (gitProgress / 100) * weight;
+        } else if (step.name === "nixos-build" && nixosProgress > 0) {
+          // NixOS build uses actual progress percentage
+          progress += (nixosProgress / 100) * weight;
+        } else {
+          // Other steps: assume 50% progress when in-progress
+          progress += 0.5 * weight;
+        }
       }
-    }
+      // Pending steps contribute 0
+    });
 
     return Math.min(100, Math.max(0, progress));
   };

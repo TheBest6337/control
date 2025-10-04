@@ -533,7 +533,7 @@ function parseNixosBuildOutput(
     const pathCount = parseInt(pathsMatch[1], 10);
     const percent = Math.max(5, nixosBuildPhaseProgress.maxPercent);
     nixosBuildPhaseProgress.maxPercent = percent;
-    
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: `Fetching ${pathCount} dependencies...`,
@@ -547,7 +547,7 @@ function parseNixosBuildOutput(
     // Only update if this moves progress forward
     const percent = Math.max(10, nixosBuildPhaseProgress.maxPercent);
     nixosBuildPhaseProgress.maxPercent = percent;
-    
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Copying dependencies...",
@@ -614,7 +614,7 @@ function parseNixosBuildOutput(
   } else if (output.includes("installing") || output.includes("Installing")) {
     const percent = Math.max(88, nixosBuildPhaseProgress.maxPercent);
     nixosBuildPhaseProgress.maxPercent = percent;
-    
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Installing packages...",
@@ -626,7 +626,7 @@ function parseNixosBuildOutput(
   ) {
     const percent = Math.max(92, nixosBuildPhaseProgress.maxPercent);
     nixosBuildPhaseProgress.maxPercent = percent;
-    
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Running post-installation...",
@@ -639,7 +639,7 @@ function parseNixosBuildOutput(
   ) {
     const percent = Math.max(95, nixosBuildPhaseProgress.maxPercent);
     nixosBuildPhaseProgress.maxPercent = percent;
-    
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "step-change",
       step: "finalize",
@@ -656,7 +656,7 @@ function parseNixosBuildOutput(
   ) {
     const percent = Math.max(12, nixosBuildPhaseProgress.maxPercent);
     nixosBuildPhaseProgress.maxPercent = percent;
-    
+
     event.sender.send(UPDATE_PROGRESS, {
       type: "nixos-progress",
       nixosPhase: "Building system configuration...",

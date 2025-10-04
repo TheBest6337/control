@@ -54,7 +54,9 @@ export function UpdateExecutePage() {
 
   const handleProgressUpdate = (data: UpdateProgressData) => {
     if (data.type === "step-change" && data.step) {
-      setStepStatus(data.step, "in-progress");
+      // Use the status from the progress data, default to "in-progress" if not specified
+      const status = data.status || "in-progress";
+      setStepStatus(data.step, status);
       updateTimeEstimate();
     } else if (data.type === "git-progress" && data.gitPercent !== undefined) {
       setGitProgress(data.gitPercent);

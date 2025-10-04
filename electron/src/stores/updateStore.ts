@@ -322,10 +322,22 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
         let remainingTime = 0;
         remainingSteps.forEach((step) => {
           if (step.status === "in-progress" && step.startTime) {
-            // For current step, calculate based on elapsed time
             const elapsed = (Date.now() - step.startTime) / 1000;
             const estimated = step.estimatedDuration * speedFactor;
-            remainingTime += Math.max(0, estimated - elapsed);
+
+            // For steps with progress tracking, use progress percentage
+            if (step.name === "clone-repo" && state.gitProgress > 0) {
+              const progressFraction = state.gitProgress / 100;
+              const estimatedRemaining = estimated * (1 - progressFraction);
+              remainingTime += Math.max(0, estimatedRemaining);
+            } else if (step.name === "nixos-build" && state.nixosProgress > 0) {
+              const progressFraction = state.nixosProgress / 100;
+              const estimatedRemaining = estimated * (1 - progressFraction);
+              remainingTime += Math.max(0, estimatedRemaining);
+            } else {
+              // For steps without progress, use elapsed time
+              remainingTime += Math.max(0, estimated - elapsed);
+            }
           } else {
             remainingTime += step.estimatedDuration * speedFactor;
           }

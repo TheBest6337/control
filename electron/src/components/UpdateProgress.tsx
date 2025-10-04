@@ -33,17 +33,22 @@ export function UpdateProgress({
     // Add progress from current step
     const currentStep = steps[currentStepIndex];
     if (currentStep && currentStep.status === "in-progress") {
-      const stepWeight = 100 / totalSteps;
-
-      // Special handling for git clone step with progress
+      // Git clone should be ~20% of total progress, nixos-build ~60%
       if (currentStep.name === "clone-repo" && gitProgress > 0) {
-        progress += (gitProgress / 100) * stepWeight;
+        // Git clone contributes up to 20% of overall progress
+        progress += (gitProgress / 100) * 20;
       } else if (currentStep.name === "nixos-build" && nixosProgress > 0) {
-        // Special handling for nixos-build step with progress
-        progress += (nixosProgress / 100) * stepWeight;
+        // NixOS build contributes up to 60% of overall progress
+        progress += (nixosProgress / 100) * 60;
       } else {
-        // For other steps, assume 50% progress if in-progress
-        progress += 0.5 * stepWeight;
+        // Other steps (clear: 5%, prepare: 5%, finalize: 10%)
+        const stepWeight =
+          currentStep.name === "clear-repo"
+            ? 5
+            : currentStep.name === "prepare"
+              ? 5
+              : 10;
+        progress += 0.5 * stepWeight; // Assume 50% if in-progress
       }
     }
 
@@ -177,39 +182,36 @@ export function UpdateProgress({
                 )}
 
               {/* NixOS Build Progress */}
-              {step.name === "nixos-build" &&
-                step.status === "in-progress" && (
-                  <div className="mt-1 space-y-1">
-                    {/* Show phase description */}
-                    {nixosPhase && (
-                      <div className="text-xs text-gray-600">{nixosPhase}</div>
-                    )}
-                    {/* Show progress bar if we have progress data */}
-                    {nixosProgress > 0 && (
-                      <div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-                          <div
-                            className="h-full rounded-full bg-blue-500 transition-all duration-500"
-                            style={{ width: `${nixosProgress}%` }}
-                          />
-                        </div>
-                        <div className="mt-1 text-xs text-gray-500">
-                          {Math.round(nixosProgress)}%
-                        </div>
+              {step.name === "nixos-build" && step.status === "in-progress" && (
+                <div className="mt-1 space-y-1">
+                  {/* Show phase description */}
+                  {nixosPhase && (
+                    <div className="text-xs text-gray-600">{nixosPhase}</div>
+                  )}
+                  {/* Show progress bar if we have progress data */}
+                  {nixosProgress > 0 && (
+                    <div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all duration-500"
+                          style={{ width: `${nixosProgress}%` }}
+                        />
                       </div>
-                    )}
-                  </div>
-                )}
+                      <div className="mt-1 text-xs text-gray-500">
+                        {Math.round(nixosProgress)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Step Duration (if completed) */}
-            {step.status === "completed" &&
-              step.startTime &&
-              step.endTime && (
-                <div className="text-xs text-gray-500">
-                  {Math.round((step.endTime - step.startTime) / 1000)}s
-                </div>
-              )}
+            {step.status === "completed" && step.startTime && step.endTime && (
+              <div className="text-xs text-gray-500">
+                {Math.round((step.endTime - step.startTime) / 1000)}s
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -217,7 +219,10 @@ export function UpdateProgress({
       {/* Warning Message */}
       <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
         <div className="flex items-start gap-2">
-          <Icon name="lu:TriangleAlert" className="mt-0.5 size-4 text-amber-600" />
+          <Icon
+            name="lu:TriangleAlert"
+            className="mt-0.5 size-4 text-amber-600"
+          />
           <div className="text-xs text-amber-800">
             <p className="font-semibold">Please do not close this window</p>
             <p className="mt-1">

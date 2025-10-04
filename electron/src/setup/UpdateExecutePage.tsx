@@ -69,6 +69,8 @@ export function UpdateExecutePage() {
       if (data.nixosPercent !== undefined) {
         setNixosProgress(data.nixosPercent);
       }
+      // Update time estimate as nixos build progresses
+      updateTimeEstimate();
     }
   };
 
@@ -84,22 +86,22 @@ export function UpdateExecutePage() {
 
     initializeSteps();
     startUpdate();
-    
+
     const res = await updateExecute(
-      updateInfo, 
+      updateInfo,
       addTerminalLine,
-      handleProgressUpdate
+      handleProgressUpdate,
     );
-    
+
     // Mark all steps as completed on success
     if (res.success) {
-      steps.forEach(step => {
+      steps.forEach((step) => {
         if (step.status === "in-progress") {
           setStepStatus(step.name, "completed");
         }
       });
     }
-    
+
     stopUpdate();
 
     if (res.success) {

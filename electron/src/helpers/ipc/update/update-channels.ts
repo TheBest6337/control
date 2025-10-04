@@ -11,7 +11,11 @@ export type UpdateStepName =
   | "nixos-build"
   | "finalize";
 
-export type UpdateStepStatus = "pending" | "in-progress" | "completed" | "failed";
+export type UpdateStepStatus =
+  | "pending"
+  | "in-progress"
+  | "completed"
+  | "failed";
 
 export type UpdateStep = {
   name: UpdateStepName;

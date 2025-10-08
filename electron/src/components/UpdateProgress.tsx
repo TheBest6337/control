@@ -8,7 +8,6 @@ type UpdateProgressProps = {
   gitProgress?: number;
   nixosProgress?: number;
   nixosPhase?: string;
-  estimatedTimeRemaining?: number | null;
 };
 
 export function UpdateProgress({
@@ -17,7 +16,6 @@ export function UpdateProgress({
   gitProgress = 0,
   nixosProgress = 0,
   nixosPhase = "",
-  estimatedTimeRemaining = null,
 }: UpdateProgressProps) {
   // Track max progress to prevent backward movement
   const maxProgressRef = React.useRef(0);
@@ -81,23 +79,6 @@ export function UpdateProgress({
 
   const overallProgress = calculateOverallProgress();
 
-  const formatTime = (seconds: number | null): string => {
-    if (seconds === null || seconds <= 0) return "Calculating...";
-
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    if (minutes === 0) {
-      return `${remainingSeconds}s`;
-    } else if (minutes < 60) {
-      return `~${minutes}m ${remainingSeconds}s`;
-    } else {
-      const hours = Math.floor(minutes / 60);
-      const remainingMinutes = minutes % 60;
-      return `~${hours}h ${remainingMinutes}m`;
-    }
-  };
-
   const getStepIcon = (step: UpdateStep): IconName => {
     switch (step.status) {
       case "completed":
@@ -156,19 +137,6 @@ export function UpdateProgress({
           />
         </div>
       </div>
-
-      {/* Time Estimate */}
-      {estimatedTimeRemaining !== null && estimatedTimeRemaining > 0 && (
-        <div className="mb-6 flex items-center gap-2 rounded-md bg-blue-50 px-4 py-3 text-sm">
-          <Icon name="lu:Clock" className="size-4 text-blue-600" />
-          <span className="text-blue-800">
-            Estimated time remaining:{" "}
-            <span className="font-semibold">
-              {formatTime(estimatedTimeRemaining)}
-            </span>
-          </span>
-        </div>
-      )}
 
       {/* Step List */}
       <div className="space-y-3">

@@ -23,7 +23,6 @@ export type UpdateStep = {
   status: UpdateStepStatus;
   startTime?: number;
   endTime?: number;
-  estimatedDuration: number; // in seconds
 };
 
 export type UpdateProgressData = {

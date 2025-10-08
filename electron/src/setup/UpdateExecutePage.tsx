@@ -25,7 +25,6 @@ export function UpdateExecutePage() {
     gitProgress,
     nixosProgress,
     nixosPhase,
-    estimatedTimeRemaining,
     setUpdateInfo,
     startUpdate,
     stopUpdate,
@@ -37,7 +36,6 @@ export function UpdateExecutePage() {
     setGitProgress,
     setNixosProgress,
     setNixosPhase,
-    updateTimeEstimate,
   } = useUpdateStore();
 
   // Set update info from search params when component mounts or search changes
@@ -59,7 +57,6 @@ export function UpdateExecutePage() {
       // Use the status from the progress data, default to "in-progress" if not specified
       const status = data.status || "in-progress";
       setStepStatus(data.step, status);
-      updateTimeEstimate();
     } else if (data.type === "git-progress" && data.gitPercent !== undefined) {
       setGitProgress(data.gitPercent);
     } else if (data.type === "nixos-progress") {
@@ -69,8 +66,6 @@ export function UpdateExecutePage() {
       if (data.nixosPercent !== undefined) {
         setNixosProgress(data.nixosPercent);
       }
-      // Update time estimate as nixos build progresses
-      updateTimeEstimate();
     }
   };
 
@@ -191,7 +186,6 @@ export function UpdateExecutePage() {
           gitProgress={gitProgress}
           nixosProgress={nixosProgress}
           nixosPhase={nixosPhase}
-          estimatedTimeRemaining={estimatedTimeRemaining}
         />
       )}
 

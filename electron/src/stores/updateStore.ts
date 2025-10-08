@@ -15,61 +15,6 @@ export type UpdateInfo = {
   commit?: string;
 };
 
-// Historical duration tracking
-type StepDuration = {
-  stepName: UpdateStepName;
-  duration: number; // in seconds
-  timestamp: number;
-};
-
-const STORAGE_KEY = "update-step-durations";
-const MAX_HISTORY_ENTRIES = 10;
-
-// Load historical durations from localStorage
-const loadHistoricalDurations = (): StepDuration[] => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-// Save duration to localStorage
-const saveStepDuration = (stepName: UpdateStepName, duration: number) => {
-  const history = loadHistoricalDurations();
-  history.push({
-    stepName,
-    duration,
-    timestamp: Date.now(),
-  });
-
-  // Keep only last MAX_HISTORY_ENTRIES entries per step
-  const filtered = history.slice(-MAX_HISTORY_ENTRIES * 6); // 6 steps
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-};
-
-// Calculate average duration for a step
-const getAverageDuration = (stepName: UpdateStepName): number => {
-  const history = loadHistoricalDurations();
-  const stepHistory = history.filter((h) => h.stepName === stepName);
-
-  if (stepHistory.length === 0) {
-    // Return default estimates if no history
-    const defaults: Record<UpdateStepName, number> = {
-      "clear-repo": 2,
-      "clone-repo": 120,
-      prepare: 3,
-      "nixos-build": 600,
-      finalize: 20,
-    };
-    return defaults[stepName];
-  }
-
-  const sum = stepHistory.reduce((acc, h) => acc + h.duration, 0);
-  return sum / stepHistory.length;
-};
-
 export type UpdateState = {
   isUpdating: boolean;
   terminalLines: string[];
@@ -79,7 +24,6 @@ export type UpdateState = {
   gitProgress: number; // 0-100
   nixosProgress: number; // 0-100
   nixosPhase: string;
-  estimatedTimeRemaining: number | null; // in seconds
 };
 
 export type UpdateActions = {
@@ -94,7 +38,6 @@ export type UpdateActions = {
   setGitProgress: (percent: number) => void;
   setNixosProgress: (percent: number) => void;
   setNixosPhase: (phase: string) => void;
-  updateTimeEstimate: () => void;
 };
 
 export type UpdateStore = UpdateState & UpdateActions;
@@ -104,31 +47,26 @@ const createInitialSteps = (): UpdateStep[] => [
     name: "clear-repo",
     displayName: "Clear old repository",
     status: "pending",
-    estimatedDuration: getAverageDuration("clear-repo"),
   },
   {
     name: "clone-repo",
     displayName: "Clone repository",
     status: "pending",
-    estimatedDuration: getAverageDuration("clone-repo"),
   },
   {
     name: "prepare",
     displayName: "Prepare installation",
     status: "pending",
-    estimatedDuration: getAverageDuration("prepare"),
   },
   {
     name: "nixos-build",
     displayName: "Build NixOS system",
     status: "pending",
-    estimatedDuration: getAverageDuration("nixos-build"),
   },
   {
     name: "finalize",
     displayName: "Configure bootloader",
     status: "pending",
-    estimatedDuration: getAverageDuration("finalize"),
   },
 ];
 
@@ -141,7 +79,6 @@ const initialState: UpdateState = {
   gitProgress: 0,
   nixosProgress: 0,
   nixosPhase: "",
-  estimatedTimeRemaining: null,
 };
 
 export const useUpdateStore = create<UpdateStore>((set) => ({
@@ -221,7 +158,6 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
         state.gitProgress = 0;
         state.nixosProgress = 0;
         state.nixosPhase = "";
-        state.estimatedTimeRemaining = null;
       }),
     ),
 
@@ -233,7 +169,6 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
         state.gitProgress = 0;
         state.nixosProgress = 0;
         state.nixosPhase = "";
-        state.estimatedTimeRemaining = null;
       }),
     ),
 
@@ -255,8 +190,6 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
           step.startTime
         ) {
           step.endTime = now;
-          const duration = (now - step.startTime) / 1000; // convert to seconds
-          saveStepDuration(stepName, duration);
         }
 
         step.status = status;
@@ -281,69 +214,6 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
     set(
       produce((state: UpdateState) => {
         state.nixosPhase = phase;
-      }),
-    ),
-
-  updateTimeEstimate: () =>
-    set(
-      produce((state: UpdateState) => {
-        const completedSteps = state.steps.filter(
-          (s) => s.status === "completed",
-        );
-        const remainingSteps = state.steps.filter(
-          (s) => s.status === "pending" || s.status === "in-progress",
-        );
-
-        if (completedSteps.length === 0) {
-          // No data yet, use estimated durations
-          state.estimatedTimeRemaining = remainingSteps.reduce(
-            (acc, s) => acc + s.estimatedDuration,
-            0,
-          );
-          return;
-        }
-
-        // Calculate average speed factor from completed steps
-        let totalActual = 0;
-        let totalEstimated = 0;
-
-        completedSteps.forEach((step) => {
-          if (step.startTime && step.endTime) {
-            const actual = (step.endTime - step.startTime) / 1000;
-            totalActual += actual;
-            totalEstimated += step.estimatedDuration;
-          }
-        });
-
-        const speedFactor =
-          totalEstimated > 0 ? totalActual / totalEstimated : 1.0;
-
-        // Calculate remaining time with speed factor adjustment
-        let remainingTime = 0;
-        remainingSteps.forEach((step) => {
-          if (step.status === "in-progress" && step.startTime) {
-            const elapsed = (Date.now() - step.startTime) / 1000;
-            const estimated = step.estimatedDuration * speedFactor;
-
-            // For steps with progress tracking, use progress percentage
-            if (step.name === "clone-repo" && state.gitProgress > 0) {
-              const progressFraction = state.gitProgress / 100;
-              const estimatedRemaining = estimated * (1 - progressFraction);
-              remainingTime += Math.max(0, estimatedRemaining);
-            } else if (step.name === "nixos-build" && state.nixosProgress > 0) {
-              const progressFraction = state.nixosProgress / 100;
-              const estimatedRemaining = estimated * (1 - progressFraction);
-              remainingTime += Math.max(0, estimatedRemaining);
-            } else {
-              // For steps without progress, use elapsed time
-              remainingTime += Math.max(0, estimated - elapsed);
-            }
-          } else {
-            remainingTime += step.estimatedDuration * speedFactor;
-          }
-        });
-
-        state.estimatedTimeRemaining = Math.ceil(remainingTime);
       }),
     ),
 }));
